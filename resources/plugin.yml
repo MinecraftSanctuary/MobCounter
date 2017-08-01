@@ -1,0 +1,10 @@
+name: MobCounter
+version: 1.0.0
+description: Counts mobs killed
+author: DarkZek
+website: https://github.com/darkzek
+
+main: com.darkzek.MobCounter.MobCounter
+
+commands:
+permissions: {}
