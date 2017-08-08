@@ -1,27 +1,21 @@
 package com.darkzek.MobCounter;
 
-import com.google.gson.Gson;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
-import java.io.InputStreamReader;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.UUID;
+import java.util.Locale;
 
 /**
  * Created by darkzek on 24/05/17.
@@ -34,8 +28,9 @@ public class MobCounter extends JavaPlugin implements Listener, CommandExecutor 
 
     FileConfiguration config;
 
-    HashMap<String, Integer> players = new HashMap();
+    HashMap<String, Double> players = new HashMap();
     ArrayList<String> names = new ArrayList<String>();
+    HashMap<Player, Location> locations = new HashMap<Player, Location>();
 
     @Override
     public void onEnable() {
@@ -45,8 +40,36 @@ public class MobCounter extends JavaPlugin implements Listener, CommandExecutor 
         if (!new File(getDataFolder().toString()).exists()) {
             saveConfig();
         }
+
         this.getServer().getPluginManager().registerEvents(this, this);
         loadPoints();
+
+        Bukkit.getServer().getScheduler().scheduleSyncRepeatingTask(this, new Runnable() {
+            public void run() {
+                ArrayList<Player> players = new ArrayList<Player>();
+                //Put all online players into the list
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    players.add(player);
+                }
+                for (Player player : players) {
+                    double points = getPoints(player.getUniqueId().toString());
+                    if (locations.get(player) != null) {
+                        //Make sure they're in the same world
+                        if (locations.get(player).getWorld().getName() == player.getWorld().getName()) {
+                            double difference = locations.get(player).distance(player.getLocation());
+                            points += difference;
+
+                            setPoints(player.getUniqueId().toString(), points);
+                        }
+                    }
+                }
+                //Set new points locations
+                locations = new HashMap<Player, Location>();
+                for (Player player : players) {
+                    locations.put(player, player.getLocation());
+                }
+            }
+        }, 60, 100);
     }
 
     @Override
@@ -66,7 +89,6 @@ public class MobCounter extends JavaPlugin implements Listener, CommandExecutor 
         //Get all playernames
         String[] playerNames = toStringArray(names.toArray());
 
-
         for (int i = 0; i < playerNames.length; i++) {
             String name = playerNames[i];
             config.set(name, players.get(name));
@@ -81,23 +103,20 @@ public class MobCounter extends JavaPlugin implements Listener, CommandExecutor 
     }
 
     public void loadPoints() {
-        //Hope no player called UUID joins..
         String[] playerNames = toStringArray(config.getStringList("UUID").toArray());
-
 
         //Loop for every player
         for (int i = 0; i < playerNames.length; i++) {
             String name = playerNames[i];
             //Get score and put it into the list of players
-            players.put(name, config.getInt(name));
+            players.put(name, config.getDouble(name));
             if (!names.contains(name)) {
                 names.add(name);
             }
-
         }
     }
 
-    public int getPoints(String UUID) {
+    public double getPoints(String UUID) {
 
         //If that player has never killed a mob before
         if (!players.containsKey(UUID)) {
@@ -105,12 +124,12 @@ public class MobCounter extends JavaPlugin implements Listener, CommandExecutor 
             setPoints(UUID, 0);
         }
 
-        int points = players.get(UUID);
+        double points = players.get(UUID);
 
         return points;
     }
 
-    public void setPoints(String UUID, int points) {
+    public void setPoints(String UUID, double points) {
         players.put(UUID, points);
         if (!names.contains(UUID)) {
             names.add(UUID);
@@ -124,40 +143,8 @@ public class MobCounter extends JavaPlugin implements Listener, CommandExecutor 
         return true;
     }
 
-    @EventHandler
-    public void onPlayerPlaceBlock(BlockPlaceEvent event) {
 
-
-        Player player = event.getPlayer();
-
-        if (!allowedBlock(event.getBlockPlaced())) {
-            return;
-        }
-
-        String UUID = player.getUniqueId().toString();
-
-        //Add point to player
-        int points = getPoints(UUID);
-        points++;
-
-        //Announce it if it gets high
-        if (points == 50) {
-            getServer().broadcastMessage(player.getDisplayName() + ChatColor.GREEN + " is on 50 blocks placed!");
-        } else {
-            //Then every 50 do it.
-            //Check if its a multiple of 50
-            if (isMultiple(points, 200)) {
-                //Announce it
-                getServer().broadcastMessage(player.getDisplayName() + ChatColor.GREEN + " is on " + points + " blocks placed");
-                //And discord
-                getServer().dispatchCommand(getServer().getConsoleSender(), "discord bcast **" + player.getDisplayName() + "** is on **" + points + "** blocks placed");
-            }
-        }
-        //Save player points
-        setPoints(UUID, points);
-    }
-
-    public boolean isMultiple(int number, int multiple) {
+    public boolean isMultiple(double number, int multiple) {
         if (number % multiple == 0) {
             return true;
         }
